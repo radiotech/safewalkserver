@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 const http = require('http').Server(app);
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 3001 });
+const wss = new WebSocket.Server({ port: 8000 });
 app.use(express.static('hosted'))
 
 const maxUsers = 1000;
