@@ -1,0 +1,95 @@
+<html>
+    <head>
+        <link href="https://fonts.googleapis.com/css?family=Kalam|Saira+Semi+Condensed" rel="stylesheet">
+        <link href="style.css" rel="stylesheet">
+        <script src="jquery.min.js"></script>
+        <script src="main.js"></script>
+    </head>
+    <body>
+        <div class="myLogo"><image src="logo.png" width="100%"></image></div>
+
+        <div class="goodLogin floatTop myTitle myHide2"><h2>SafeWalk Login</h2></div>
+        <div class="goodLogin floatBottom myBody myHide2">
+            <h4>Full Name:</h4>
+            <input style="border: 2px solid #000000;" class='myA myInput'></input>
+            <h4>PID:</h4>
+            <input class='myB myInput'></input>
+            <h4>Phone Number:</h4>
+            <input class='myC myInput'></input>
+            <br /><br />
+            <input class='myButton' type='button' value='Login' onclick="login($('.myA').val(),$('.myB').val(),$('.myC').val());"></input>
+        </div>
+
+        <div class="badLogin floatTop myTitle myHide2"><h2>SafeWalk Login</h2></div>
+        <div class="badLogin floatBottom myBody myHide2">
+            <h4>Full Name:</h4>
+            <input style="border: 2px solid #000000;" class='myD myInput'></input>
+            <h4>PID:</h4>
+            <input class='myE myInput'></input>
+            <h4>Phone Number:</h4>
+            <input class='myF myInput'></input>
+            <h4 class='badLoginText'></h4>
+            <input class='myButton' type='button' value='Login' onclick="login($('.myD').val(),$('.myE').val(),$('.myF').val());"></input>
+        </div>
+
+        <div class="uNone floatTop myTitle myHide2"><h2>Request a Walk</h2></div>
+        <div class="uNone floatBottom myBody myHide2">
+            <h4 class='uNoneText'></h4>
+            <input class='myButton' type='button' value='Request a Walk' onclick="uRequest({'x':1,'y':2,'z':3},{'x':4,'y':5,'z':6});"></input>
+        </div>
+
+        <div class="uPending floatTop myTitle myHide2"><h2>Walk Requested</h2></div>
+        <div class="uPending floatBottom myBody myHide2">
+            <h4 class='uPendingText'></h4>
+            <input class='myButton' type='button' value='Cancel Walk' onclick="uCancel();"></input>
+        </div>
+
+        <div class="uRejected floatTop myTitle myHide2"><h2>Walk Rejected</h2></div>
+        <div class="uRejected floatBottom myBody myHide2">
+            <h4 class='uRejectedText'></h4>
+            <input class='myButton' type='button' value='Try Again' onclick="uCancel();"></input>
+        </div>
+        
+        <div class="uAccepted floatTop myTitle myHide2"><h2>Walk Scheduled</h2></div>
+        <div class="uAccepted floatBottom myBody myHide2">
+            <h4 class='uAcceptedText'></h4>
+            <input class='myButton' type='button' value='Cancel Walk' onclick="uCancel();"></input>
+        </div>
+
+        <div class="uWalking floatTop myTitle myHide2"><h2>Walk in Progress</h2></div>
+        <div class="uWalking floatBottom myBody myHide2">
+            <h4 class='uWalkingText'></h4>
+        </div>
+
+        <div class="aNone floatTop myTitle myHide2"><h2>No Walks Scheduled</h2></div>
+        <div class="aNone floatBottom myBody myHide2">
+            <h4 class='aNoneText'>You will be notified when a walk is requested.</h4>
+        </div>
+
+        <div class="aReview floatTop myTitle myHide2"><h2>Review Requested Walk</h2></div>
+        <div class="aReview floatBottom myBody myHide2">
+            <h4 class='aReviewText'></h4>
+            <input class='myButton' type='button' value='Accept' onclick="aAccept();"></input>
+            <input class='myButton' type='button' value='Reject' onclick="aReject($('.myG').val());"></input>
+            <h4>Reason for Rejection:</h4>
+            <input class='myG myInput'></input>
+        </div>
+
+        <div class="aBiking floatTop myTitle myHide2"><h2>Biking to Location</h2></div>
+        <div class="aBiking floatBottom myBody myHide2">
+            <h4 class='aBikingText'></h4>
+            <input class='myButton' type='button' value='Walk Started' onclick="aStart();"></input>
+        </div>
+
+        <div class="aWalking floatTop myTitle myHide2"><h2>Walking to Location</h2></div>
+        <div class="aWalking floatBottom myBody myHide2">
+            <h4 class='aWalkingText'></h4>
+            <input class='myButton' type='button' value='Walk Completed' onclick="aEnd();"></input>
+        </div>
+
+        <div class="badConnect floatTop myTitle myHide2"><h2>Connection Lost</h2></div>
+        <div class="badConnect floatBottom myBody myHide2">
+            <input class='myButton' type='button' value='Reload' onclick="window.location.reload();"></input>
+        </div>
+    </body>
+</hmtl>
