@@ -1,3 +1,21 @@
+//Openshift variables
+var ipaddress = process.env.OPENSHIFT_NODEJS_IP || "192.168.240.140";
+var port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
+
+
+//NodeJS require modules
+var WebSocketServer = require('ws').Server,
+    wss = new WebSocketServer({host:ipaddress, port:port});
+//var fs = require('fs');
+
+
+wss.on('connection', function(ws) {
+    console.log((new Date()) + ' Connection from origin: ' + ws._socket.remoteAddress);
+});
+
+console.log((new Date()) + " Server is listening on: " + ipaddress + ':' port);
+
+/*
 const express = require('express');
 const app = express();
 const http = require('http').Server(app);
@@ -16,22 +34,22 @@ for(let i = 0; i < maxUsers; i++){
 enum State {uNone, uPending, uRejected, uAccepted, uWalking}
 
 interface User {
-    active: boolean; /*validity*/
+    active: boolean; //validity
     
-    fullname: string; /*basic data*/
+    fullname: string; //basic data
     pid: string;
     phone: string;
     id: string;
     socket: WS;
     admin: boolean;
 
-    state?: State; /*user data*/
+    state?: State; //user data
     walker?: User;
     walkStart?: Location;
     walkEnd?: Location;
     message?: string;
 
-    toWalk?: User[]; /*admin data*/
+    toWalk?: User[]; //admin data
 
     uRequest?: (Data) => void;
     uCancel?: (Data) => void;
@@ -453,3 +471,5 @@ var port = 8080;
 http.listen(port, function(){
     console.log('SafeWalk server started on port '+port);
 });
+
+*/
