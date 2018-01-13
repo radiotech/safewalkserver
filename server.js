@@ -1,13 +1,14 @@
 //Openshift variables
-var ipaddress = process.env.OPENSHIFT_NODEJS_IP || "192.168.240.140";
-var port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
+//var ipaddress = process.env.OPENSHIFT_NODEJS_IP || "192.168.240.140";
+//var port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
 //NodeJS require modules
-var WebSocketServer = require('ws').Server, wss = new WebSocketServer({ host: ipaddress, port: 8000 });
+var WebSocketServer = require('ws').Server;
+var wss = new WebSocketServer({port: 8000 });
 //var fs = require('fs');
 wss.on('connection', function (ws) {
-    console.log((new Date()) + ' Connection from origin: ' + ws._socket.remoteAddress);
+    console.log('Connection!!!');
 });
-console.log((new Date()) + " Server is listening on: " + ipaddress + ':', port);
+console.log(" Server is listening!");
 /*
 const express = require('express');
 const app = express();
