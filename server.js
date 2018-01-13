@@ -2,7 +2,7 @@
 var ipaddress = process.env.OPENSHIFT_NODEJS_IP || "192.168.240.140";
 var port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
 //NodeJS require modules
-var WebSocketServer = require('ws').Server, wss = new WebSocketServer({ host: ipaddress, port: port });
+var WebSocketServer = require('ws').Server, wss = new WebSocketServer({ host: ipaddress, port: 8000 });
 //var fs = require('fs');
 wss.on('connection', function (ws) {
     console.log((new Date()) + ' Connection from origin: ' + ws._socket.remoteAddress);

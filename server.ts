@@ -5,7 +5,7 @@ var port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
 
 //NodeJS require modules
 var WebSocketServer = require('ws').Server,
-    wss = new WebSocketServer({host:ipaddress, port:port});
+    wss = new WebSocketServer({host:ipaddress, port:8000});
 //var fs = require('fs');
 
 
