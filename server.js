@@ -5,6 +5,8 @@ var express = require('express'),
 
 var http = require('http').Server(app);
 app.use(express.static('hosted'));
+
+var port = process.env.PORT || process.env.OPENSHIFT_NODEJS_PORT || 8080;
 //app.use(morgan('combined'))
 
 /*
