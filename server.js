@@ -1,114 +1,401 @@
-//  OpenShift sample Node application
-var express = require('express'),
-    app     = express(),
-    morgan  = require('morgan');
-
+var express = require('express');
+var app = express();
 var http = require('http').Server(app);
+var WebSocket = require('ws');
+var wss = new WebSocket.Server({ port: 3001 });
 app.use(express.static('hosted'));
-
-var port = process.env.PORT || process.env.OPENSHIFT_NODEJS_PORT || 8080;
-//app.use(morgan('combined'))
-
-/*
-var port = process.env.PORT || process.env.OPENSHIFT_NODEJS_PORT || 8080,
-    ip   = process.env.IP   || process.env.OPENSHIFT_NODEJS_IP || '0.0.0.0',
-    mongoURL = process.env.OPENSHIFT_MONGODB_DB_URL || process.env.MONGO_URL,
-    mongoURLLabel = "";
-
-if (mongoURL == null && process.env.DATABASE_SERVICE_NAME) {
-  var mongoServiceName = process.env.DATABASE_SERVICE_NAME.toUpperCase(),
-      mongoHost = process.env[mongoServiceName + '_SERVICE_HOST'],
-      mongoPort = process.env[mongoServiceName + '_SERVICE_PORT'],
-      mongoDatabase = process.env[mongoServiceName + '_DATABASE'],
-      mongoPassword = process.env[mongoServiceName + '_PASSWORD']
-      mongoUser = process.env[mongoServiceName + '_USER'];
-
-  if (mongoHost && mongoPort && mongoDatabase) {
-    mongoURLLabel = mongoURL = 'mongodb://';
-    if (mongoUser && mongoPassword) {
-      mongoURL += mongoUser + ':' + mongoPassword + '@';
-    }
-    // Provide UI label that excludes user id and pw
-    mongoURLLabel += mongoHost + ':' + mongoPort + '/' + mongoDatabase;
-    mongoURL += mongoHost + ':' +  mongoPort + '/' + mongoDatabase;
-
-  }
+var maxUsers = 1000;
+var nextUser = 0;
+var users = [];
+for (var i = 0; i < maxUsers; i++) {
+    users[i] = undefined;
 }
-var db = null,
-    dbDetails = new Object();
-
-var initDb = function(callback) {
-  if (mongoURL == null) return;
-
-  var mongodb = require('mongodb');
-  if (mongodb == null) return;
-
-  mongodb.connect(mongoURL, function(err, conn) {
-    if (err) {
-      callback(err);
-      return;
+var State;
+(function (State) {
+    State[State["uNone"] = 0] = "uNone";
+    State[State["uPending"] = 1] = "uPending";
+    State[State["uRejected"] = 2] = "uRejected";
+    State[State["uAccepted"] = 3] = "uAccepted";
+    State[State["uWalking"] = 4] = "uWalking";
+})(State || (State = {}));
+var Walker = /** @class */ (function () {
+    function Walker(socket, fullname, pid, phone) {
+        this.active = true;
+        this.fullname = fullname;
+        this.pid = pid;
+        this.phone = phone;
+        this.id = 'admin ' + pid + " (" + fullname + ")";
+        this.socket = socket;
+        this.admin = true;
+        this.toWalk = [];
     }
-
-    db = conn;
-    dbDetails.databaseName = db.databaseName;
-    dbDetails.url = mongoURLLabel;
-    dbDetails.type = 'MongoDB';
-
-    console.log('Connected to MongoDB at: %s', mongoURL);
-  });
-};
-
-app.get('/', function (req, res) {
-  // try to initialize the db on every request if it's not already
-  // initialized.
-  if (!db) {
-    initDb(function(err){});
-  }
-  if (db) {
-    var col = db.collection('counts');
-    // Create a document with request IP and current time of request
-    col.insert({ip: req.ip, date: Date.now()});
-    col.count(function(err, count){
-      if (err) {
-        console.log('Error running count. Message:\n'+err);
-      }
-      res.render('index.html', { pageCountMessage : count, dbInfo: dbDetails });
-    });
-  } else {
-    res.render('index.html', { pageCountMessage : null});
-  }
+    return Walker;
+}());
+var Walkee = /** @class */ (function () {
+    function Walkee(socket, fullname, pid, phone) {
+        this.active = true;
+        this.fullname = fullname;
+        this.pid = pid;
+        this.phone = phone;
+        this.id = 'user ' + pid + " (" + fullname + ")";
+        this.socket = socket;
+        this.admin = false;
+        this.state = State.uNone;
+        this.walker = undefined;
+        this.walkStart = undefined;
+        this.walkEnd = undefined;
+        this.message = 'an error occurred.';
+    }
+    return Walkee;
+}());
+function isAdmin(pid) {
+    return pid == '1' || pid == '2';
+}
+function isUser(pid) {
+    return pid != '-1' && pid != '-2';
+}
+wss.on('connection', function (socket) {
+    console.log("+");
+    socket.onclose = function (message) {
+        if (socket.user != undefined) {
+            socket.user.active = false;
+            console.log(socket.user.id + " closed their connection to the server");
+        }
+        console.log("-");
+    };
+    socket.onmessage = function (message) {
+        var data = { 'event': undefined };
+        try {
+            data = JSON.parse(message.data);
+        }
+        catch (e) {
+            console.log('could not process message data: "' + message.data + '" (' + e.name + ': ' + e.message + ')');
+            return;
+        }
+        if (data.event == undefined) {
+            console.log((socket.user == undefined ? ('IP ' + socket._socket.remoteAddress + ':' + socket._socket.remotePort) : (socket.user.id)) + ' sent a message without an event: "' + message.data + '"');
+            return;
+        }
+        if (socket.user != undefined) {
+            try {
+                socket.user[data.event](data);
+            }
+            catch (e) {
+                console.log('could not process message data: "' + message.data + '" because "' + e.name + ': ' + e.message + '"');
+                return;
+            }
+        }
+        else {
+            if (data.event == "login") {
+                if (data.fullname == undefined || data.pid == undefined || data.phone == undefined) {
+                    console.log('IP ' + socket._socket.remoteAddress + ':' + socket._socket.remotePort + ' made a bad login request with "' + message.data + '"');
+                    socket.send(JSON.stringify({ 'event': 'badLogin', 'message': 'Bad login request format.' }));
+                }
+                else {
+                    if (data.fullname == "") {
+                        console.log('IP ' + socket._socket.remoteAddress + ':' + socket._socket.remotePort + ' attempted to log in with an invalid name "' + message.data + '"');
+                        socket.send(JSON.stringify({ 'event': 'badLogin', 'message': 'Invalid name.' }));
+                    }
+                    else if (!isUser(data.pid)) {
+                        console.log('IP ' + socket._socket.remoteAddress + ':' + socket._socket.remotePort + ' attempted to log in with an invalid name "' + message.data + '"');
+                        socket.send(JSON.stringify({ 'event': 'badLogin', 'message': 'PID not found.' }));
+                    }
+                    else if (data.phone == "") {
+                        console.log('IP ' + socket._socket.remoteAddress + ':' + socket._socket.remotePort + ' attempted to log in with an invalid name "' + message.data + '"');
+                        socket.send(JSON.stringify({ 'event': 'badLogin', 'message': 'Invalid phone number.' }));
+                    }
+                    else {
+                        var user = findUser(data.pid);
+                        if (user != undefined) {
+                            user.fullname = data.fullname;
+                            user.phone = data.phone;
+                            user.id = (data.fullname + " [" + data.pid + "]");
+                            user.socket = socket;
+                            socket.user = user;
+                            user.active = true;
+                        }
+                        else {
+                            user = isAdmin(data.pid) ? new Walker(socket, data.fullname, data.pid, data.phone) : new Walkee(socket, data.fullname, data.pid, data.phone);
+                            users[nextUser] = user;
+                            socket.user = user;
+                            nextUser++;
+                            if (nextUser >= maxUsers) {
+                                nextUser = 0;
+                            }
+                        }
+                        if (user.admin) {
+                            setupAdmin(socket);
+                        }
+                        else {
+                            setupUser(socket);
+                        }
+                        console.log(user.id + " connected from IP " + socket._socket.remoteAddress + ":" + socket._socket.remotePort + ' with phone number ' + user.phone);
+                        updateState();
+                        updateStateRaw(user);
+                    }
+                }
+            }
+        }
+    };
 });
-
-app.get('/pagecount', function (req, res) {
-  // try to initialize the db on every request if it's not already
-  // initialized.
-  if (!db) {
-    initDb(function(err){});
-  }
-  if (db) {
-    db.collection('counts').count(function(err, count ){
-      res.send('{ pageCount: ' + count + '}');
-    });
-  } else {
-    res.send('{ pageCount: -1 }');
-  }
-});
-
-// error handling
-app.use(function(err, req, res, next){
-  console.error(err.stack);
-  res.status(500).send('Something bad happened!');
-});
-
-initDb(function(err){
-  console.log('Error connecting to Mongo. Message:\n'+err);
-});
-
-app.listen(port, ip);
-console.log('Server running on http://%s:%s', ip, port);
-
-module.exports = app ;
-*/
+function setupUser(socket) {
+    socket.user.uRequest = function (data) {
+        updateState();
+        if (data.walkStart != undefined && data.walkEnd != undefined) {
+            if (socket.user.state == State.uNone) {
+                if (isWalker()) {
+                    console.log(socket.user.id + " requested a walk (" + JSON.stringify(data.walkStart) + " to " + JSON.stringify(data.walkEnd) + ")");
+                    socket.user.state = State.uPending;
+                    socket.user.walkStart = data.walkStart;
+                    socket.user.walkEnd = data.walkEnd;
+                    socket.user.walker = nextWalker(socket.user.walkStart);
+                    updateState();
+                    updateStateRaw(socket.user);
+                    updateStateRaw(socket.user.walker);
+                }
+                else {
+                    console.log(socket.user.id + " tried to request a walk but there are no available walkers");
+                    socket.user.state = State.uRejected;
+                    socket.user.message = 'there are no walkers online.';
+                    updateState();
+                    updateStateRaw(socket.user);
+                }
+            }
+            else {
+                console.log(socket.user.id + " tried to request a walk from an invalid state");
+            }
+        }
+        else {
+            console.log(socket.user.id + ' requested a walk with invalid data (' + JSON.stringify(data) + ')');
+        }
+    };
+    socket.user.uCancel = function (data) {
+        updateState();
+        if (socket.user.state == State.uPending || socket.user.state == State.uAccepted || socket.user.state == State.uRejected) {
+            console.log(socket.user.id + " canceled their walk");
+            var tempWalker = socket.user.walker;
+            socket.user.state = State.uNone;
+            updateState();
+            updateStateRaw(socket.user);
+            updateStateRaw(tempWalker);
+        }
+        else {
+            console.log(socket.user.id + " tried to cancel their walk but it does not exist");
+        }
+    };
+}
+function setupAdmin(socket) {
+    socket.user.aAccept = function (data) {
+        updateState();
+        var user = findUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uPending) {
+                console.log(socket.user.id + " accepted a walk for user " + user.id);
+                user.state = State.uAccepted;
+                user.walker = socket.user;
+                updateState();
+                updateStateRaw(socket.user);
+                updateStateRaw(user);
+            }
+            else {
+                console.log(socket.user.id + " tried to accepted a walk for user " + user.id + " but it was removed or already accepted/rejected");
+            }
+        }
+        else {
+            console.log(socket.user.id + ' accepted a walk for an invalid user (' + data.pid + ')');
+        }
+    };
+    socket.user.aReject = function (data) {
+        updateState();
+        var user = findUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uPending) {
+                console.log(socket.user.id + " REJECTED a walk for user " + user.id + ' because "' + data.message + '"');
+                user.state = State.uRejected;
+                user.message = '"' + data.message + '"';
+                updateState();
+                updateStateRaw(socket.user);
+                updateStateRaw(user);
+            }
+            else {
+                console.log(socket.user.id + " tried to reject a walk for user " + user.id + " but it was removed or already accepted/rejected");
+                updateState();
+                updateStateRaw(socket.user);
+            }
+        }
+        else {
+            console.log(socket.user.id + ' rejected a walk for an invalid user (' + data.pid + ')');
+        }
+    };
+    socket.user.aStart = function (data) {
+        updateState();
+        var user = findUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uAccepted) {
+                console.log(socket.user.id + " started a walk with user " + user.id);
+                user.state = State.uWalking;
+                updateState();
+                updateStateRaw(socket.user);
+                updateStateRaw(user);
+            }
+            else {
+                console.log(socket.user.id + " tried to start a walk for user " + user.id + " but it was removed or already started/rejected");
+            }
+        }
+        else {
+            console.log(socket.user.id + ' started a walk for an invalid user (' + data.pid + ')');
+        }
+    };
+    socket.user.aEnd = function (data) {
+        updateState();
+        var user = findUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uWalking) {
+                if (user.walker == socket.user && user == socket.user.toWalk[0]) {
+                    console.log(socket.user.id + " ended a walk for user " + user.id);
+                    user.state = State.uNone;
+                    updateState();
+                    updateStateRaw(socket.user);
+                    updateStateRaw(user);
+                }
+                else {
+                    console.log(socket.user.id + " tried to end a walk for user " + user.id + " but was not this user's assigned walker");
+                }
+            }
+            else {
+                console.log(socket.user.id + " tried to end a walk for user " + user.id + " but it was removed or already started/rejected");
+            }
+        }
+        else {
+            console.log(socket.user.id + ' ended a walk for an invalid user (' + data.pid + ')');
+        }
+    };
+}
+function updateState() {
+    for (var i = 0; i < maxUsers; i++) {
+        var user = users[i];
+        if (user != undefined && user.active) {
+            //keep toWalk lists up to date
+            if (user.admin) {
+                for (var j = 0; j < user.toWalk.length; j++) {
+                    if (user.toWalk[j].walker != user || (user.toWalk[j].state != State.uPending && user.toWalk[j].state != State.uAccepted && user.toWalk[j].state != State.uWalking)) {
+                        user.toWalk.splice(j, 1);
+                        j--;
+                    }
+                }
+            }
+            else {
+                if (user.walker != undefined) {
+                    if (user.state == State.uPending || user.state == State.uAccepted || user.state == State.uWalking) {
+                        var isAdded = false;
+                        for (var j = 0; j < user.walker.toWalk.length; j++) {
+                            if (user.walker.toWalk[j] == user) {
+                                isAdded = true;
+                            }
+                        }
+                        if (!isAdded) {
+                            user.walker.toWalk.push(user);
+                        }
+                    }
+                    else {
+                        user.walker = undefined;
+                    }
+                }
+                else {
+                    if (user.state == State.uPending || user.state == State.uAccepted || user.state == State.uWalking) {
+                        user.state = State.uRejected;
+                        user.message = 'there was an error.';
+                    }
+                }
+            }
+        }
+        else if (user != undefined && !user.active) {
+            users[i] = undefined;
+        }
+    }
+}
+function updateStateRaw(user) {
+    if (user == undefined) {
+        for (var i = 0; i < maxUsers; i++) {
+            if (users[i] != undefined) {
+                updateStateRaw(users[i]);
+            }
+        }
+    }
+    else if (user.active) {
+        if (user.admin) {
+            var toAccept = undefined;
+            for (var i = 0; i < user.toWalk.length; i++) {
+                if (user.toWalk[i].state == State.uPending) {
+                    toAccept = user.toWalk[i];
+                    break;
+                }
+            }
+            if (toAccept != undefined) {
+                user.socket.send(JSON.stringify({ 'event': 'aReview', 'fullname': toAccept.fullname, 'pid': toAccept.pid, 'phone': toAccept.phone, 'walkStart': toAccept.walkStart, 'walkEnd': toAccept.walkEnd }));
+            }
+            else if (user.toWalk.length == 0) {
+                user.socket.send(JSON.stringify({ 'event': 'aNone' }));
+            }
+            else if (user.toWalk[0].state == State.uAccepted) {
+                console.log('x3');
+                user.socket.send(JSON.stringify({ 'event': 'aBiking', 'fullname': user.toWalk[0].fullname, 'pid': user.toWalk[0].pid, 'phone': user.toWalk[0].phone, 'walkStart': user.toWalk[0].walkStart, 'time': '9' }));
+            }
+            else {
+                console.log('x4');
+                user.socket.send(JSON.stringify({ 'event': 'aWalking', 'fullname': user.toWalk[0].fullname, 'pid': user.toWalk[0].pid, 'phone': user.toWalk[0].phone, 'walkEnd': user.toWalk[0].walkStart, 'time': '9' }));
+            }
+        }
+        else {
+            switch (user.state) {
+                case State.uNone:
+                    user.socket.send(JSON.stringify({ 'event': 'uNone', 'time': '9' }));
+                    break;
+                case State.uPending:
+                    user.socket.send(JSON.stringify({ 'event': 'uPending', 'time': '9' }));
+                    break;
+                case State.uRejected:
+                    user.socket.send(JSON.stringify({ 'event': 'uRejected', 'message': user.message }));
+                    break;
+                case State.uAccepted:
+                    console.log('x1');
+                    user.socket.send(JSON.stringify({ 'event': 'uAccepted', 'fullname': user.walker.fullname, 'phone': user.walker.phone, 'time': '9' }));
+                    break;
+                case State.uWalking:
+                    console.log('x2');
+                    user.socket.send(JSON.stringify({ 'event': 'uWalking', 'fullname': user.walker.fullname, 'phone': user.walker.phone, 'time': '9' }));
+                    break;
+            }
+        }
+    }
+}
+function findUser(pid) {
+    for (var i = 0; i < maxUsers; i++) {
+        if (users[i] != undefined && users[i].pid == pid) {
+            return users[i];
+        }
+    }
+    return undefined;
+}
+function isWalker() {
+    for (var i = 0; i < maxUsers; i++) {
+        if (users[i] != undefined && users[i].admin) {
+            return true;
+        }
+    }
+    return false;
+}
+function nextWalker(data) {
+    for (var i = 0; i < maxUsers; i++) {
+        if (users[i] != undefined && users[i].admin) {
+            return users[i];
+        }
+    }
+}
+function getDis() {
+    //https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&mode=walking&origins=35.9079876,-79.0480345&destinations=35.9081102,%20-79.0502256&key=AIzaSyAdF87T_v7G-XPdwRdCBjlHzyVm1mGRZA8
+}
+var port = 8080;
 http.listen(port, function () {
-  console.log('SafeWalk server started on port ' + port);
+    console.log('SafeWalk server started on port ' + port);
 });
