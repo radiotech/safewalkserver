@@ -1,16 +1,38 @@
-let socket: WebSocket;
 let reviewPID, walkPID: string;
+let polling = false;
+let sessionID = "";
+function send(data:{}){
+    function getResponse(){
+        let data = {};
+        try{
+            data = JSON.parse(this.responseText);
+        } catch(e){}
+        message(data);
+    }
+    var req = new XMLHttpRequest();
+    req.addEventListener("load", getResponse);
+    console.log(`http://safewalkserver-ahharvey.cloudapps.unc.edu/data?${Object.keys(data).reduce((a,i)=>(a+`${i}=${data[i]}&`),"")}a=1`);
+    req.open("GET", `http://safewalkserver-ahharvey.cloudapps.unc.edu/data?${Object.keys(data).reduce((a,i)=>(a+`${i}=${data[i]}&`),"")}a=1`);
+    req.send();
+}
+function poll(){
+    send({id:sessionID,event:"getState"});
+    if(polling){
+        setTimeout(poll,5000);
+    }
+}
 function setup(){
-    socket = new WebSocket('ws://localhost:3001');
-    socket.onopen = function(){setTimeout(function(){message({'event':'goodLogin'});}, 500);}
-    socket.onclose = function(){message({'event':'badConnect'});}
-    socket.onmessage = function(msg: MessageEvent){message(JSON.parse(msg.data));}
+    message({'event':'goodLogin'});
 }
 function message(data){
     console.log(data);
     let text = undefined;
     if(data.event == 'badLogin'){
         text = data.message;
+    } else if(data.event == 'login'){
+        sessionID = data.id;
+        polling = true;
+        poll();
     } else if(data.event == 'uNone'){
         text = data.walkers>0?'There are no walkers online yet. They should be online [SAFEWALK HOURS].':('The next walk is available '+(data.time=='0'?'now!':(data.time=='1'?'in 1 minute.':'in '+data.time+' minutes.')));
     } else if(data.event == 'uPending'){
@@ -38,24 +60,24 @@ function message(data){
 }
 function login(a: string, b: string, c: string){
     $('.myA').val(a);$('.myB').val(b);$('.myC').val(c);$('.myD').val(a);$('.myE').val(b);$('.myF').val(c);
-    socket.send(JSON.stringify({'event':'login','fullname':a,'pid':b,'phone':c}));
+    send({'event':'login','fullname':a,'pid':b,'phone':c});
 }
 function uRequest(a, b){
-    socket.send(JSON.stringify({'event':'uRequest','walkStart':a,'walkEnd':b}));
+    send({id:sessionID,'event':'uRequest','walkStart':a,'walkEnd':b});
 }
 function uCancel(){
-    socket.send(JSON.stringify({'event':'uCancel'}));
+    send({id:sessionID,'event':'uCancel'});
 }
 function aAccept(){
-    socket.send(JSON.stringify({'event':'aAccept','pid':reviewPID}));
+    send({id:sessionID,'event':'aAccept','pid':reviewPID});
 }
 function aReject(a){
-    socket.send(JSON.stringify({'event':'aReject','pid':reviewPID,'message':a}));
+    send({id:sessionID,'event':'aReject','pid':reviewPID,'message':a});
 }
 function aStart(a){
-    socket.send(JSON.stringify({'event':'aStart','pid':walkPID}));
+    send({id:sessionID,'event':'aStart','pid':walkPID});
 }
 function aEnd(a){
-    socket.send(JSON.stringify({'event':'aEnd','pid':walkPID}));
+    send({id:sessionID,'event':'aEnd','pid':walkPID});
 }
 $(setup);

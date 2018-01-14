@@ -1,359 +1,250 @@
-var ipaddress = process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1";
-var port = process.env.OPENSHIFT_NODEJS_PORT || 8080;
-var WebSocketServer = require('ws').Server;
-var http = require('http');
-var server = http.createServer(function (request, response) {
-    console.log((new Date()) + ' Received request for ' + request.url);
-    response.writeHead(200, { 'Content-Type': 'text/plain' });
-    response.write("Welcome to Node.js on OpenShift!\n\n");
-    response.end("Thanks for visiting us! \n");
-});
-server.listen(port, ipaddress, function () {
-    console.log((new Date()) + ' Server is listening on port 8080');
-});
-wss = new WebSocketServer({
-    server: server,
-    autoAcceptConnections: false
-});
-wss.on('connection', function (ws) {
-    console.log("New connection");
-    ws.on('message', function (message) {
-        ws.send("Received: " + message);
-    });
-    ws.send('Welcome!');
-});
-console.log("Listening to " + ipaddress + ":" + port + "...");
-/*
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8000 });
-app.use(express.static('hosted'))
-
-const maxUsers = 1000;
-let nextUser = 0;
-let users: User[] = [];
-
-for(let i = 0; i < maxUsers; i++){
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var express = require('express');
+var app = express();
+var http = require('http').Server(app);
+app.use(express.static('hosted'));
+var maxUsers = 1000;
+var nextUser = 0;
+var idMap = {};
+var users = [];
+for (var i = 0; i < maxUsers; i++) {
     users[i] = undefined;
 }
-
-enum State {uNone, uPending, uRejected, uAccepted, uWalking}
-
-interface User {
-    active: boolean; //validity
-    
-    fullname: string; //basic data
-    pid: string;
-    phone: string;
-    id: string;
-    socket: WS;
-    admin: boolean;
-
-    state?: State; //user data
-    walker?: User;
-    walkStart?: Location;
-    walkEnd?: Location;
-    message?: string;
-
-    toWalk?: User[]; //admin data
-
-    uRequest?: (Data) => void;
-    uCancel?: (Data) => void;
-    aReject?: (Data) => void;
-    aAccept?: (Data) => void;
-    aStart?: (Data) => void;
-    aEnd?: (Data) => void;
-}
-
-class Walker implements User {
-    active: boolean;
-    fullname: string;
-    pid: string;
-    phone: string;
-    id: string;
-    socket: WS;
-    admin: boolean;
-    
-    toWalk: User[];
-
-    constructor(socket: WS, fullname: string, pid: string, phone: string){
+var State;
+(function (State) {
+    State[State["uNone"] = 0] = "uNone";
+    State[State["uPending"] = 1] = "uPending";
+    State[State["uRejected"] = 2] = "uRejected";
+    State[State["uAccepted"] = 3] = "uAccepted";
+    State[State["uWalking"] = 4] = "uWalking";
+})(State || (State = {}));
+var STATE = ["IDLE", "PENDING", "REJECTED", "ACCEPTED", "WALKING"];
+var User = /** @class */ (function () {
+    function User(fullname, pid, phone, admin) {
         this.active = true;
         this.fullname = fullname;
         this.pid = pid;
         this.phone = phone;
-        this.id = 'admin '+pid+" ("+fullname+")";
-        this.socket = socket;
-        this.admin = true;
-        this.toWalk = [];
-    }
-}
-
-class Walkee implements User {
-    active: boolean;
-    fullname: string;
-    pid: string;
-    phone: string;
-    id: string;
-    socket: WS;
-    admin: boolean;
-    
-    state: State;
-    walker: User;
-    walkStart: Location;
-    walkEnd: Location;
-    message: string;
-
-    constructor(socket: WS, fullname: string, pid: string, phone: string){
-        this.active = true;
-        this.fullname = fullname;
-        this.pid = pid;
-        this.phone = phone;
-        this.id = 'user '+pid+" ("+fullname+")";
-        this.socket = socket;
-        this.admin = false;
-
+        this.username = (admin ? 'admin ' : 'user ') + pid + " (" + fullname + ")";
+        this.admin = admin;
         this.state = State.uNone;
         this.walker = undefined;
         this.walkStart = undefined;
         this.walkEnd = undefined;
         this.message = 'an error occurred.';
+        this.toWalk = [];
+        users[nextUser++] = this;
+        nextUser = nextUser % maxUsers;
     }
-}
-
-interface Locaiton{
-    x: number;
-    y: number;
-    z: number;
-}
-interface WS {
-    onmessage: (message: Message) => void;
-    onclose: (message: Message) => void;
-    send: (message: string) => void;
-    _socket: {remoteAddress,remotePort};
-    user: User;
-}
-interface Message {
-    data: string;
-}
-interface Data {
-    event: string;
-    fullname?: string;
-    pid?: string;
-    phone?: string;
-    walkStart?: Location;
-    walkEnd?: Location;
-    time?: string;
-    message?: string;
-}
-
-function isAdmin(pid: string){
-    return pid=='1' || pid=='2';
-}
-function isUser(pid: string){
-    return pid!='-1' && pid!='-2';
-}
-
-wss.on('connection', function(socket: WS){
-    console.log("+");
-    socket.onclose = function(message: Message){
-        if(socket.user != undefined){
-            socket.user.active = false;
-            console.log(socket.user.id+" closed their connection to the server");
+    User.login = function (fullname, pid, phone) {
+        if (fullname == "") {
+            console.log("Someone attempted to log in with an invalid name.");
+            return { event: "badLogin", message: "Plese enter a valid name." };
         }
-        console.log("-");
+        if (!isUser(pid)) {
+            console.log("Someone attempted to log in with an invalid pid.");
+            return { event: "badLogin", message: "Plese enter a valid pid." };
+        }
+        if (phone == "") {
+            console.log("Someone attempted to log in with an invalid phone number.");
+            return { event: "badLogin", message: "Plese enter a valid phone number." };
+        }
+        var user = getUser(pid);
+        if (user != undefined) {
+            user.fullname = fullname;
+            user.phone = phone;
+            user.username = (user.admin ? 'admin ' : 'user ') + pid + " (" + fullname + ")";
+        }
+        else {
+            user = isAdmin(pid) ? new Walker(fullname, pid, phone) : new Walkee(fullname, pid, phone);
+        }
+        var sessionID = genSessionID();
+        idMap[sessionID] = user;
+        console.log(user.username + " connected from IP ...:... with phone number " + user.phone);
+        return { event: "login", id: sessionID };
+    };
+    return User;
+}());
+var Walker = /** @class */ (function (_super) {
+    __extends(Walker, _super);
+    function Walker(fullname, pid, phone) {
+        return _super.call(this, fullname, pid, phone, true) || this;
     }
-    socket.onmessage = function(message: Message){
-        let data: Data = {'event': undefined};
-        try{
-            data = JSON.parse(message.data);
-        } catch(e) {
-            console.log('could not process message data: "'+message.data+'" ('+e.name+': '+e.message+')');
-            return;
-        }
-        if(data.event == undefined){
-            console.log((socket.user==undefined?('IP '+socket._socket.remoteAddress+':'+socket._socket.remotePort):(socket.user.id))+' sent a message without an event: "'+message.data+'"');
-            return;
-        }
-        if(socket.user != undefined){
-            try{
-                socket.user[data.event](data);
-            } catch(e) {
-                console.log('could not process message data: "'+message.data+'" because "'+e.name+': '+e.message+'"');
-                return;
-            }
-        } else {
-            if(data.event=="login"){
-                if(data.fullname == undefined || data.pid == undefined || data.phone == undefined){
-                    console.log('IP '+socket._socket.remoteAddress+':'+socket._socket.remotePort+' made a bad login request with "'+message.data+'"');
-                    socket.send(JSON.stringify({'event':'badLogin','message':'Bad login request format.'}));
-                } else {
-                    if(data.fullname == ""){
-                        console.log('IP '+socket._socket.remoteAddress+':'+socket._socket.remotePort+' attempted to log in with an invalid name "'+message.data+'"');
-                        socket.send(JSON.stringify({'event':'badLogin','message':'Invalid name.'}));
-                    } else if(!isUser(data.pid)){
-                        console.log('IP '+socket._socket.remoteAddress+':'+socket._socket.remotePort+' attempted to log in with an invalid name "'+message.data+'"');
-                        socket.send(JSON.stringify({'event':'badLogin','message':'PID not found.'}));
-                    } else if(data.phone == ""){
-                        console.log('IP '+socket._socket.remoteAddress+':'+socket._socket.remotePort+' attempted to log in with an invalid name "'+message.data+'"');
-                        socket.send(JSON.stringify({'event':'badLogin','message':'Invalid phone number.'}));
-                    } else {
-                        var user = findUser(data.pid);
-                        if(user != undefined){
-                            user.fullname = data.fullname;
-                            user.phone = data.phone;
-                            user.id = (data.fullname+" ["+data.pid+"]");
-                            
-                            user.socket = socket;
-                            socket.user = user;
-                            user.active = true;
-                        } else {
-                            user = isAdmin(data.pid)?new Walker(socket,data.fullname,data.pid,data.phone):new Walkee(socket,data.fullname,data.pid,data.phone);
-                            users[nextUser] = user;
-                            socket.user = user;
-                            nextUser++;
-                            if(nextUser>=maxUsers){
-                                nextUser = 0;
-                            }
-                        }
-                        if(user.admin){
-                            setupAdmin(socket);
-                        } else {
-                            setupUser(socket);
-                        }
-                        console.log(user.id+" connected from IP "+socket._socket.remoteAddress+":"+socket._socket.remotePort+' with phone number '+user.phone);
-                        updateState();
-                        updateStateRaw(user);
-                    }
-                }
+    Walker.prototype.getState = function () {
+        var toAccept = undefined;
+        for (var i = 0; i < this.toWalk.length; i++) {
+            if (this.toWalk[i].state == State.uPending) {
+                toAccept = this.toWalk[i];
+                break;
             }
         }
-    };
-});
-
-function setupUser(socket: WS){
-    socket.user.uRequest = function(data: Data){
-        updateState();
-        if(data.walkStart != undefined && data.walkEnd != undefined){
-            if(socket.user.state == State.uNone){
-                if(isWalker()){
-                    console.log(socket.user.id+" requested a walk ("+JSON.stringify(data.walkStart)+" to "+JSON.stringify(data.walkEnd)+")");
-                    socket.user.state = State.uPending;
-                    socket.user.walkStart = data.walkStart;
-                    socket.user.walkEnd = data.walkEnd;
-                    socket.user.walker = nextWalker(socket.user.walkStart);
-                    updateState();
-                    updateStateRaw(socket.user);
-                    updateStateRaw(socket.user.walker);
-                } else {
-                    console.log(socket.user.id+" tried to request a walk but there are no available walkers");
-                    socket.user.state = State.uRejected;
-                    socket.user.message = 'there are no walkers online.';
-                    updateState();
-                    updateStateRaw(socket.user);
-                }
-            } else {
-                console.log(socket.user.id+" tried to request a walk from an invalid state");
-            }
-        } else {
-            console.log(socket.user.id+' requested a walk with invalid data ('+JSON.stringify(data)+')');
+        if (toAccept != undefined) {
+            return { 'event': 'aReview', 'fullname': toAccept.fullname, 'pid': toAccept.pid, 'phone': toAccept.phone, 'walkStart': toAccept.walkStart, 'walkEnd': toAccept.walkEnd };
+        }
+        else if (this.toWalk.length == 0) {
+            return { 'event': 'aNone' };
+        }
+        else if (this.toWalk[0].state == State.uAccepted) {
+            console.log('x3');
+            return { 'event': 'aBiking', 'fullname': this.toWalk[0].fullname, 'pid': this.toWalk[0].pid, 'phone': this.toWalk[0].phone, 'walkStart': this.toWalk[0].walkStart, 'time': '9' };
+        }
+        else {
+            console.log('x4');
+            return { 'event': 'aWalking', 'fullname': this.toWalk[0].fullname, 'pid': this.toWalk[0].pid, 'phone': this.toWalk[0].phone, 'walkEnd': this.toWalk[0].walkStart, 'time': '9' };
         }
     };
-    socket.user.uCancel = function(data: Data){
-        updateState();
-        if(socket.user.state == State.uPending || socket.user.state == State.uAccepted || socket.user.state == State.uRejected){
-            console.log(socket.user.id+" canceled their walk");
-            var tempWalker = socket.user.walker;
-            socket.user.state = State.uNone;
-            updateState();
-            updateStateRaw(socket.user);
-            updateStateRaw(tempWalker);
-        } else {
-            console.log(socket.user.id+" tried to cancel their walk but it does not exist");
-        }
-    };
-}
-
-function setupAdmin(socket: WS){
-    socket.user.aAccept = function(data: Data){
-        updateState();
-        var user = findUser(data.pid);
-        if(user != undefined){
-            if(user.state == State.uPending){
-                console.log(socket.user.id+" accepted a walk for user "+user.id);
+    Walker.prototype.aAccept = function (data) {
+        var user = getUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uPending) {
+                console.log(this.username + " accepted a walk for " + user.username);
                 user.state = State.uAccepted;
-                user.walker = socket.user;
-                updateState();
-                updateStateRaw(socket.user);
-                updateStateRaw(user);
-            } else {
-                console.log(socket.user.id+" tried to accepted a walk for user "+user.id+" but it was removed or already accepted/rejected");
+                user.walker = this;
             }
-        } else {
-            console.log(socket.user.id+' accepted a walk for an invalid user ('+data.pid+')');
+            else {
+                console.log(this.username + " tried to accepted a walk for " + user.username + " but they were " + STATE[user.state]);
+            }
         }
+        else {
+            console.log(this.username + ' accepted a walk for an invalid user (' + data.pid + ')');
+        }
+        return this.getState();
     };
-    socket.user.aReject = function(data: Data){
-        updateState();
-        var user = findUser(data.pid);
-        if(user != undefined){
-            if(user.state == State.uPending){
-                console.log(socket.user.id+" REJECTED a walk for user "+user.id+' because "'+data.message+'"');
+    Walker.prototype.aReject = function (data) {
+        var user = getUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uPending) {
+                console.log(this.username + " REJECTED a walk for " + user.username + ' because "' + data.message + '"');
                 user.state = State.uRejected;
-                user.message = '"'+data.message+'"';
-                updateState();
-                updateStateRaw(socket.user);
-                updateStateRaw(user);
-            } else {
-                console.log(socket.user.id+" tried to reject a walk for user "+user.id+" but it was removed or already accepted/rejected");
-                updateState();
-                updateStateRaw(socket.user);
+                user.message = "\"" + data.message + "\"";
             }
-        } else {
-            console.log(socket.user.id+' rejected a walk for an invalid user ('+data.pid+')');
+            else {
+                console.log(this.username + " tried to reject a walk for " + user.username + " but they were " + STATE[user.state]);
+            }
         }
+        else {
+            console.log(this.username + ' rejected a walk for an invalid user (' + data.pid + ')');
+        }
+        return this.getState();
     };
-    socket.user.aStart = function(data: Data){
-        updateState();
-        var user = findUser(data.pid);
-        if(user != undefined){
-            if(user.state == State.uAccepted){
-                console.log(socket.user.id+" started a walk with user "+user.id);
+    Walker.prototype.aStart = function (data) {
+        var user = getUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uAccepted) {
+                console.log(this.username + " started a walk with " + user.username);
                 user.state = State.uWalking;
-                updateState();
-                updateStateRaw(socket.user);
-                updateStateRaw(user);
-            } else {
-                console.log(socket.user.id+" tried to start a walk for user "+user.id+" but it was removed or already started/rejected");
             }
-        } else {
-            console.log(socket.user.id+' started a walk for an invalid user ('+data.pid+')');
+            else {
+                console.log(this.username + " tried to start a walk for " + user.username + " but they were " + STATE[user.state]);
+            }
         }
+        else {
+            console.log(this.username + ' started a walk for an invalid user (' + data.pid + ')');
+        }
+        return this.getState();
     };
-    socket.user.aEnd = function(data: Data){
-        updateState();
-        var user = findUser(data.pid);
-        if(user != undefined){
-            if(user.state == State.uWalking){
-                if(user.walker==socket.user && user == socket.user.toWalk[0]){
-                    console.log(socket.user.id+" ended a walk for user "+user.id);
+    Walker.prototype.aEnd = function (data) {
+        var user = getUser(data.pid);
+        if (user != undefined) {
+            if (user.state == State.uWalking) {
+                if (user.walker == this && user == this.toWalk[0]) {
+                    console.log(this.username + " ended a walk for " + user.username);
                     user.state = State.uNone;
-                    updateState();
-                    updateStateRaw(socket.user);
-                    updateStateRaw(user);
-                } else {
-                    console.log(socket.user.id+" tried to end a walk for user "+user.id+" but was not this user's assigned walker");
                 }
-            } else {
-                console.log(socket.user.id+" tried to end a walk for user "+user.id+" but it was removed or already started/rejected");
+                else {
+                    console.log(this.username + " tried to end a walk for " + user.username + " but was not this user's assigned walker");
+                }
             }
-        } else {
-            console.log(socket.user.id+' ended a walk for an invalid user ('+data.pid+')');
+            else {
+                console.log(this.username + " tried to end a walk for " + user.username + " but they were " + STATE[user.state]);
+            }
+        }
+        else {
+            console.log(this.username + ' ended a walk for an invalid user (' + data.pid + ')');
+        }
+        return this.getState();
+    };
+    return Walker;
+}(User));
+var Walkee = /** @class */ (function (_super) {
+    __extends(Walkee, _super);
+    function Walkee(fullname, pid, phone) {
+        return _super.call(this, fullname, pid, phone, false) || this;
+    }
+    Walkee.prototype.getState = function () {
+        switch (this.state) {
+            case State.uNone:
+                return { 'event': 'uNone', 'time': '9' };
+            case State.uPending:
+                return { 'event': 'uPending', 'time': '9' };
+            case State.uRejected:
+                return { 'event': 'uRejected', 'message': this.message };
+            case State.uAccepted:
+                console.log('x1');
+                return { 'event': 'uAccepted', 'fullname': this.walker.fullname, 'phone': this.walker.phone, 'time': '9' };
+            case State.uWalking:
+                console.log('x2');
+                return { 'event': 'uWalking', 'fullname': this.walker.fullname, 'phone': this.walker.phone, 'time': '9' };
         }
     };
+    Walkee.prototype.uRequest = function (data) {
+        if (data.walkStart != undefined && data.walkEnd != undefined) {
+            if (this.state == State.uNone) {
+                if (isWalker()) {
+                    console.log(this.username + " requested a walk (" + JSON.stringify(data.walkStart) + " to " + JSON.stringify(data.walkEnd) + ")");
+                    this.state = State.uPending;
+                    this.walkStart = data.walkStart;
+                    this.walkEnd = data.walkEnd;
+                    this.walker = nextWalker(this.walkStart);
+                }
+                else {
+                    console.log(this.username + " tried to request a walk but there are no available walkers");
+                    this.state = State.uRejected;
+                    this.message = 'there are no walkers online.';
+                }
+            }
+            else {
+                console.log(this.username + " tried to request a walk from an invalid state");
+            }
+        }
+        else {
+            console.log(this.username + ' requested a walk with invalid data (' + JSON.stringify(data) + ')');
+        }
+        return this.getState();
+    };
+    Walkee.prototype.uCancel = function (data) {
+        if (this.state == State.uPending || this.state == State.uAccepted || this.state == State.uRejected) {
+            console.log(this.username + " canceled their walk while " + STATE[this.state]);
+            var tempWalker = this.walker;
+            this.state = State.uNone;
+        }
+        else {
+            console.log(this.username + " tried to cancel their walk but it does not exist");
+        }
+        return this.getState();
+    };
+    return Walkee;
+}(User));
+function isAdmin(pid) {
+    return pid == '1' || pid == '2';
 }
-
+function isUser(pid) {
+    if (/^[0-9]{9}$/.test(pid) || /^[0-9]{1}$/.test(pid) || /^[0-9]{2}$/.test(pid)) {
+        //looks valid
+        return true;
+    }
+    return false;
+}
+/*
 function updateState(){
     for(var i = 0; i < maxUsers; i++){
         var user = users[i];
@@ -444,40 +335,71 @@ function updateStateRaw(user: User){
         }
     }
 }
-
-function findUser(pid){
-    for(var i = 0; i < maxUsers; i++){
-        if(users[i] != undefined && users[i].pid == pid){
+*/
+function getUser(pid) {
+    for (var i = 0; i < maxUsers; i++) {
+        if (users[i] != undefined && users[i].pid == pid) {
             return users[i];
         }
     }
     return undefined;
 }
-
-function isWalker(){
-    for(var i = 0; i < maxUsers; i++){
-        if(users[i] != undefined && users[i].admin){
+function isWalker() {
+    for (var i = 0; i < maxUsers; i++) {
+        if (users[i] != undefined && users[i].admin) {
             return true;
         }
     }
     return false;
 }
-
-function nextWalker(data: Location){ //needs work!
-    for(var i = 0; i < maxUsers; i++){
-        if(users[i] != undefined && users[i].admin){
+function nextWalker(data) {
+    for (var i = 0; i < maxUsers; i++) {
+        if (users[i] != undefined && users[i].admin) {
             return users[i];
         }
     }
 }
-
-function getDis(){
+function getDis() {
     //https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&mode=walking&origins=35.9079876,-79.0480345&destinations=35.9081102,%20-79.0502256&key=AIzaSyAdF87T_v7G-XPdwRdCBjlHzyVm1mGRZA8
 }
-
-var port = 8080;
-http.listen(port, function(){
-    console.log('SafeWalk server started on port '+port);
+function genSessionID(id) {
+    if (id === void 0) { id = ""; }
+    var chars = "1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    id = id + chars.charAt(Math.floor(Math.random() * chars.length));
+    return id.length < 16 ? genSessionID(id) : id;
+}
+app.use('/data', function (req, res, next) {
+    var data = req.query;
+    if (data.event != undefined) {
+        if (data.id != undefined) {
+            var user = idMap[data.id];
+            if (user != undefined) {
+                try {
+                    res.send(JSON.stringify(user[data.event](data)));
+                    return;
+                }
+                catch (e) {
+                    console.log("could not process message data: \"" + JSON.stringify(data) + "\" because \"" + e.name + "\": \"" + e.message + "\"");
+                }
+            }
+            else {
+                console.log("Recieved a user request with invalid session id: \"" + data.id + "\"");
+            }
+        }
+        else if (data.event == "login") {
+            res.send(JSON.stringify(User.login(data.fullname || "", data.pid || "", data.phone || "")));
+            return;
+        }
+        else {
+            console.log("Recieved a message with an event but no session id: \"" + JSON.stringify(data) + "\"");
+        }
+    }
+    else {
+        console.log("Recieved a message without an event: \"" + JSON.stringify(data) + "\"");
+    }
+    res.send(JSON.stringify({ event: "badConnect" }));
 });
-
-*/ 
+var port = 8080;
+http.listen(port, function () {
+    console.log('SafeWalk server started on port ' + port);
+});
