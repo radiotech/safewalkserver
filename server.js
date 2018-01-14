@@ -70,7 +70,7 @@ var User = /** @class */ (function () {
         var sessionID = genSessionID();
         idMap[sessionID] = user;
         console.log(user.username + " connected from IP ...:... with phone number " + user.phone);
-        return { event: "login", id: sessionID };
+        return { event: "goodLogin", id: sessionID };
     };
     return User;
 }());
@@ -79,7 +79,7 @@ var Walker = /** @class */ (function (_super) {
     function Walker(fullname, pid, phone) {
         return _super.call(this, fullname, pid, phone, true) || this;
     }
-    Walker.prototype.getState = function () {
+    Walker.prototype.ping = function () {
         var toAccept = undefined;
         for (var i = 0; i < this.toWalk.length; i++) {
             if (this.toWalk[i].state == State.uPending) {
@@ -117,7 +117,7 @@ var Walker = /** @class */ (function (_super) {
         else {
             console.log(this.username + ' accepted a walk for an invalid user (' + data.pid + ')');
         }
-        return this.getState();
+        return this.ping();
     };
     Walker.prototype.aReject = function (data) {
         var user = getUser(data.pid);
@@ -134,7 +134,7 @@ var Walker = /** @class */ (function (_super) {
         else {
             console.log(this.username + ' rejected a walk for an invalid user (' + data.pid + ')');
         }
-        return this.getState();
+        return this.ping();
     };
     Walker.prototype.aStart = function (data) {
         var user = getUser(data.pid);
@@ -150,7 +150,7 @@ var Walker = /** @class */ (function (_super) {
         else {
             console.log(this.username + ' started a walk for an invalid user (' + data.pid + ')');
         }
-        return this.getState();
+        return this.ping();
     };
     Walker.prototype.aEnd = function (data) {
         var user = getUser(data.pid);
@@ -171,7 +171,7 @@ var Walker = /** @class */ (function (_super) {
         else {
             console.log(this.username + ' ended a walk for an invalid user (' + data.pid + ')');
         }
-        return this.getState();
+        return this.ping();
     };
     return Walker;
 }(User));
@@ -180,7 +180,7 @@ var Walkee = /** @class */ (function (_super) {
     function Walkee(fullname, pid, phone) {
         return _super.call(this, fullname, pid, phone, false) || this;
     }
-    Walkee.prototype.getState = function () {
+    Walkee.prototype.ping = function () {
         switch (this.state) {
             case State.uNone:
                 return { 'event': 'uNone', 'time': '9' };
@@ -219,7 +219,7 @@ var Walkee = /** @class */ (function (_super) {
         else {
             console.log(this.username + ' requested a walk with invalid data (' + JSON.stringify(data) + ')');
         }
-        return this.getState();
+        return this.ping();
     };
     Walkee.prototype.uCancel = function (data) {
         if (this.state == State.uPending || this.state == State.uAccepted || this.state == State.uRejected) {
@@ -230,7 +230,7 @@ var Walkee = /** @class */ (function (_super) {
         else {
             console.log(this.username + " tried to cancel their walk but it does not exist");
         }
-        return this.getState();
+        return this.ping();
     };
     return Walkee;
 }(User));

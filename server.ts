@@ -93,7 +93,7 @@ class User {
         idMap[sessionID] = user;
         
         console.log(`${user.username} connected from IP ...:... with phone number ${user.phone}`);
-        return {event:"login", id:sessionID};
+        return {event:"goodLogin", id:sessionID};
     }
 }
 
@@ -103,7 +103,7 @@ class Walker extends User {
         super(fullname, pid, phone, true);
     }
 
-    getState(){
+    ping(){
         let toAccept = undefined;
         for(let i = 0; i < this.toWalk.length; i++){
             if(this.toWalk[i].state == State.uPending){
@@ -136,7 +136,7 @@ class Walker extends User {
         } else {
             console.log(this.username+' accepted a walk for an invalid user ('+data.pid+')');
         }
-        return this.getState();
+        return this.ping();
     }
     aReject(data){
         var user = getUser(data.pid);
@@ -151,7 +151,7 @@ class Walker extends User {
         } else {
             console.log(this.username+' rejected a walk for an invalid user ('+data.pid+')');
         }
-        return this.getState();
+        return this.ping();
     }
     aStart(data){
         var user = getUser(data.pid);
@@ -165,7 +165,7 @@ class Walker extends User {
         } else {
             console.log(this.username+' started a walk for an invalid user ('+data.pid+')');
         }
-        return this.getState();
+        return this.ping();
     }
     aEnd(data){
         var user = getUser(data.pid);
@@ -183,7 +183,7 @@ class Walker extends User {
         } else {
             console.log(this.username+' ended a walk for an invalid user ('+data.pid+')');
         }
-        return this.getState();
+        return this.ping();
     }
 }
 
@@ -193,7 +193,7 @@ class Walkee extends User {
         super(fullname,pid,phone,false);
     }
 
-    getState(){
+    ping(){
         switch(this.state){
             case State.uNone:
                 return {'event':'uNone','time':'9'};
@@ -229,7 +229,7 @@ class Walkee extends User {
         } else {
             console.log(this.username+' requested a walk with invalid data ('+JSON.stringify(data)+')');
         }
-        return this.getState();
+        return this.ping();
     }
 
     uCancel(data){
@@ -240,7 +240,7 @@ class Walkee extends User {
         } else {
             console.log(this.username+" tried to cancel their walk but it does not exist");
         }
-        return this.getState();
+        return this.ping();
     }
 }
 
