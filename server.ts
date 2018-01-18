@@ -230,10 +230,6 @@ class Walkee extends User {
                 console.log(this.username+" tried to request a walk from an invalid state");
             }
         } else {
-            console.log(data.startX);
-            console.log(data.startY);
-            console.log(data.endX);
-            console.log(data.endY);
             console.log(this.username+' requested a walk with invalid data ('+JSON.stringify(data)+')');
         }
         return this.ping();

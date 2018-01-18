@@ -38,8 +38,10 @@ var User = /** @class */ (function () {
         this.admin = admin;
         this.state = State.uNone;
         this.walker = undefined;
-        this.walkStart = undefined;
-        this.walkEnd = undefined;
+        this.startX = -1;
+        this.startY = -1;
+        this.endX = -1;
+        this.endY = -1;
         this.message = 'an error occurred.';
         this.toWalk = [];
         users[nextUser++] = this;
@@ -88,18 +90,18 @@ var Walker = /** @class */ (function (_super) {
             }
         }
         if (toAccept != undefined) {
-            return { 'event': 'aReview', 'fullname': toAccept.fullname, 'pid': toAccept.pid, 'phone': toAccept.phone, 'walkStart': toAccept.walkStart, 'walkEnd': toAccept.walkEnd };
+            return { 'event': 'aReview', 'fullname': toAccept.fullname, 'pid': toAccept.pid, 'phone': toAccept.phone, 'startX': toAccept.startX, 'startY': toAccept.startY, 'endX': toAccept.endX, 'endY': toAccept.endY };
         }
         else if (this.toWalk.length == 0) {
             return { 'event': 'aNone' };
         }
         else if (this.toWalk[0].state == State.uAccepted) {
             console.log('x3');
-            return { 'event': 'aBiking', 'fullname': this.toWalk[0].fullname, 'pid': this.toWalk[0].pid, 'phone': this.toWalk[0].phone, 'walkStart': this.toWalk[0].walkStart, 'time': '9' };
+            return { 'event': 'aBiking', 'fullname': this.toWalk[0].fullname, 'pid': this.toWalk[0].pid, 'phone': this.toWalk[0].phone, 'startX': this.toWalk[0].startX, 'startY': this.toWalk[0].startY, 'time': '9' };
         }
         else {
             console.log('x4');
-            return { 'event': 'aWalking', 'fullname': this.toWalk[0].fullname, 'pid': this.toWalk[0].pid, 'phone': this.toWalk[0].phone, 'walkEnd': this.toWalk[0].walkStart, 'time': '9' };
+            return { 'event': 'aWalking', 'fullname': this.toWalk[0].fullname, 'pid': this.toWalk[0].pid, 'phone': this.toWalk[0].phone, 'endX': this.toWalk[0].endX, 'endY': this.toWalk[0].endY, 'time': '9' };
         }
     };
     Walker.prototype.aAccept = function (data) {
@@ -197,14 +199,16 @@ var Walkee = /** @class */ (function (_super) {
         }
     };
     Walkee.prototype.uRequest = function (data) {
-        if (data.walkStart != undefined && data.walkEnd != undefined) {
+        if (data.startX != undefined && data.startY != undefined && data.endX != undefined && data.endY != undefined) {
             if (this.state == State.uNone) {
                 if (isWalker()) {
-                    console.log(this.username + " requested a walk (" + JSON.stringify(data.walkStart) + " to " + JSON.stringify(data.walkEnd) + ")");
+                    console.log(this.username + " requested a walk [(" + data.startX + ", " + data.startY + ") to (" + data.endX + ", " + data.endY + ")]");
                     this.state = State.uPending;
-                    this.walkStart = data.walkStart;
-                    this.walkEnd = data.walkEnd;
-                    this.walker = nextWalker(this.walkStart);
+                    this.startX = data.startX;
+                    this.startY = data.startY;
+                    this.endX = data.endX;
+                    this.endY = data.endY;
+                    this.walker = nextWalker(this.startX, this.startY);
                 }
                 else {
                     console.log(this.username + " tried to request a walk but there are no available walkers");
@@ -352,7 +356,7 @@ function isWalker() {
     }
     return false;
 }
-function nextWalker(data) {
+function nextWalker(x, y) {
     for (var i = 0; i < maxUsers; i++) {
         if (users[i] != undefined && users[i].admin) {
             return users[i];
