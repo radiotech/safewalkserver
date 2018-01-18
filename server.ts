@@ -15,20 +15,17 @@ for(let i = 0; i < maxUsers; i++){
 enum State {uNone, uPending, uRejected, uAccepted, uWalking}
 const STATE = ["IDLE", "PENDING", "REJECTED", "ACCEPTED", "WALKING"];
 
-interface Locaiton{
-    x: number;
-    y: number;
-    z: number;
-}
 interface Data {
     event: string;
+    time?: string;
+    message?: string;
     fullname?: string;
     pid?: string;
     phone?: string;
-    walkStart?: Location;
-    walkEnd?: Location;
-    time?: string;
-    message?: string;
+    startX?: number;
+    startY?: number;
+    endX?: number;
+    endY?: number;
 }
 
 class User {
@@ -41,8 +38,10 @@ class User {
     
     state: State; /*user data*/
     walker: User;
-    walkStart: Location;
-    walkEnd: Location;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
     message: string;
 
     toWalk: User[]; /*admin data*/
@@ -57,8 +56,10 @@ class User {
 
         this.state = State.uNone;
         this.walker = undefined;
-        this.walkStart = undefined;
-        this.walkEnd = undefined;
+        this.startX = -1;
+        this.startY = -1;
+        this.endX = -1;
+        this.endY = -1;
         this.message = 'an error occurred.';
 
         this.toWalk = [];
@@ -104,7 +105,7 @@ class Walker extends User {
     }
 
     ping(){
-        let toAccept = undefined;
+        let toAccept: User = undefined;
         for(let i = 0; i < this.toWalk.length; i++){
             if(this.toWalk[i].state == State.uPending){
                 toAccept = this.toWalk[i];
@@ -112,18 +113,18 @@ class Walker extends User {
             }
         }
         if(toAccept != undefined){
-            return {'event':'aReview','fullname':toAccept.fullname,'pid':toAccept.pid,'phone':toAccept.phone,'walkStart':toAccept.walkStart,'walkEnd':toAccept.walkEnd};
+            return {'event':'aReview','fullname':toAccept.fullname,'pid':toAccept.pid,'phone':toAccept.phone,'startX':toAccept.startX,'startY':toAccept.startY,'endX':toAccept.endX,'endY':toAccept.endY};
         } else if(this.toWalk.length == 0){
             return {'event':'aNone'};
         } else if(this.toWalk[0].state == State.uAccepted) {
             console.log('x3');
-            return {'event':'aBiking','fullname':this.toWalk[0].fullname,'pid':this.toWalk[0].pid,'phone':this.toWalk[0].phone,'walkStart':this.toWalk[0].walkStart,'time':'9'};
+            return {'event':'aBiking','fullname':this.toWalk[0].fullname,'pid':this.toWalk[0].pid,'phone':this.toWalk[0].phone,'startX':this.toWalk[0].startX,'startY':this.toWalk[0].startY,'time':'9'};
         } else {
             console.log('x4');
-            return {'event':'aWalking','fullname':this.toWalk[0].fullname,'pid':this.toWalk[0].pid,'phone':this.toWalk[0].phone,'walkEnd':this.toWalk[0].walkStart,'time':'9'};
+            return {'event':'aWalking','fullname':this.toWalk[0].fullname,'pid':this.toWalk[0].pid,'phone':this.toWalk[0].phone,'endX':this.toWalk[0].endX,'endY':this.toWalk[0].endY,'time':'9'};
         }
     }
-    aAccept(data){
+    aAccept(data: Data){
         var user = getUser(data.pid);
         if(user != undefined){
             if(user.state == State.uPending){
@@ -138,7 +139,7 @@ class Walker extends User {
         }
         return this.ping();
     }
-    aReject(data){
+    aReject(data: Data){
         var user = getUser(data.pid);
         if(user != undefined){
             if(user.state == State.uPending){
@@ -153,7 +154,7 @@ class Walker extends User {
         }
         return this.ping();
     }
-    aStart(data){
+    aStart(data: Data){
         var user = getUser(data.pid);
         if(user != undefined){
             if(user.state == State.uAccepted){
@@ -167,7 +168,7 @@ class Walker extends User {
         }
         return this.ping();
     }
-    aEnd(data){
+    aEnd(data: Data){
         var user = getUser(data.pid);
         if(user != undefined){
             if(user.state == State.uWalking){
@@ -209,15 +210,17 @@ class Walkee extends User {
                 return {'event':'uWalking','fullname':this.walker.fullname,'phone':this.walker.phone,'time':'9'};
         }
     }
-    uRequest(data){
-        if(data.walkStart != undefined && data.walkEnd != undefined){
+    uRequest(data: Data){
+        if(data.startX != undefined && data.startY != undefined && data.endX != undefined && data.endY != undefined){
             if(this.state == State.uNone){
                 if(isWalker()){
-                    console.log(this.username+" requested a walk ("+JSON.stringify(data.walkStart)+" to "+JSON.stringify(data.walkEnd)+")");
+                    console.log(`${this.username} requested a walk [(${data.startX}, ${data.startY}) to (${data.endX}, ${data.endY})]`);
                     this.state = State.uPending;
-                    this.walkStart = data.walkStart;
-                    this.walkEnd = data.walkEnd;
-                    this.walker = nextWalker(this.walkStart);
+                    this.startX = data.startX;
+                    this.startY = data.startY;
+                    this.endX = data.endX;
+                    this.endY = data.endY;
+                    this.walker = nextWalker(this.startX,this.startY);
                 } else {
                     console.log(this.username+" tried to request a walk but there are no available walkers");
                     this.state = State.uRejected;
@@ -232,7 +235,7 @@ class Walkee extends User {
         return this.ping();
     }
 
-    uCancel(data){
+    uCancel(data: Data){
         if(this.state == State.uPending || this.state == State.uAccepted || this.state == State.uRejected){
             console.log(this.username+" canceled their walk while "+STATE[this.state]);
             var tempWalker = this.walker;
@@ -366,7 +369,7 @@ function isWalker(){
     return false;
 }
 
-function nextWalker(data: Location){ //needs work!
+function nextWalker(x: number, y: number){ //needs work!
     for(var i = 0; i < maxUsers; i++){
         if(users[i] != undefined && users[i].admin){
             return users[i];
